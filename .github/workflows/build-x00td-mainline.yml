@@ -1,0 +1,104 @@
+name: Build Kernel X00TD Mainline
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'qcom-sdm660-*'
+
+jobs:
+  build-all:
+    runs-on: [self-hosted, Linux, aarch64]
+    env:
+      ARCH: arm64
+      DEVICE: asus-x00td
+      LOCALVERSION: "-x00td-mainline"
+    
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install Build Tools
+        run: |
+          doas apt update
+          doas apt install -y bc build-essential flex bison libssl-dev libelf-dev \
+          crossbuild-essential-arm64 mkbootimg device-tree-compiler
+
+      - name: Prepare Defconfig
+        run: |
+          mkdir -p .output
+          make O=.output sdm660_defconfig
+
+      - name: Inject X00TD & Networking Drivers
+        run: |
+          # Fokus: Mengaktifkan seluruh jalur jaringan & fitur router
+          scripts/config --objtree .output --enable CONFIG_WCN3990
+          scripts/config --objtree .output --enable CONFIG_QCOM_IPA
+          scripts/config --objtree .output --enable CONFIG_QCOM_BAM_DMUX
+          scripts/config --objtree .output --enable CONFIG_BRIDGE
+          scripts/config --objtree .output --enable CONFIG_VLAN_8021Q
+          scripts/config --objtree .output --enable CONFIG_TUN
+          scripts/config --objtree .output --enable CONFIG_PPP
+          scripts/config --objtree .output --enable CONFIG_IP_NF_IPTABLES
+          scripts/config --objtree .output --enable CONFIG_IP_NF_NAT
+          scripts/config --objtree .output --enable CONFIG_NETFILTER_XT_MATCH_COMMENT
+          scripts/config --objtree .output --enable CONFIG_SQUASHFS
+          scripts/config --objtree .output --enable CONFIG_OVERLAY_FS
+          
+          # Terapkan perubahan
+          cd .output && make olddefconfig
+
+      - name: Compile Kernel & DTB
+        run: |
+          make O=.output LOCALVERSION=$LOCALVERSION -j$(nproc) Image.gz dtbs modules
+
+      - name: Prepare Output Directory (pmOS Standard)
+        run: |
+          mkdir -p deploy/dtb
+          cp .output/arch/arm64/boot/Image.gz deploy/vmlinuz
+          cp .output/arch/arm64/boot/dts/qcom/sdm660-asus-x00td.dtb deploy/dtb/
+          
+          # Buat extlinux.conf standar
+          cat <<EOF > deploy/extlinux.conf
+          label postmarketOS
+            kernel /vmlinuz
+            fdt /dtb/sdm660-asus-x00td.dtb
+            append console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk0p51 rw rootwait
+          EOF
+
+      - name: Generate ramdisk
+        run: |
+          echo "OpenWrt Placeholder" > ramdisk.txt
+          gzip -c ramdisk.txt > deploy/ramdisk.img
+
+      - name: Create Android boot.img
+        run: |
+          # Menggabungkan Kernel + DTB untuk bootloader Android
+          cat .output/arch/arm64/boot/Image.gz .output/arch/arm64/boot/dts/qcom/sdm660-asus-x00td.dtb > Image.gz-dtb
+          
+          mkbootimg \
+            --kernel Image.gz-dtb \
+            --ramdisk deploy/ramdisk.img \
+            --base 0x80000000 \
+            --pagesize 2048 \
+            --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk0p51 rw rootwait" \
+            -o deploy/boot.img
+
+      - name: Package Kernel Modules
+        run: |
+          make O=.output INSTALL_MOD_PATH=../deploy/modules modules_install
+          cd deploy/modules && tar -czf ../modules.tar.gz .
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: X00TD-Mainline-Standard
+          path: |
+            deploy/boot.img
+            deploy/vmlinuz
+            deploy/dtb/
+            deploy/extlinux.conf
+            deploy/ramdisk.img
+            deploy/modules.tar.gz
