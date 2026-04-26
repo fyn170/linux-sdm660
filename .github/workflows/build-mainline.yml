@@ -1,4 +1,4 @@
-name: Build Kernel X00TD Mainline
+name: Build X00TD Mainline
 
 on:
   workflow_dispatch:
@@ -8,9 +8,10 @@ on:
 
 jobs:
   build-all:
-    runs-on: [self-hosted, Linux, aarch64]
+    runs-on: ubuntu-latest
     env:
       ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
       DEVICE: asus-x00td
       LOCALVERSION: "-x00td-mainline"
     
@@ -22,8 +23,8 @@ jobs:
 
       - name: Install Build Tools
         run: |
-          doas apt update
-          doas apt install -y bc build-essential flex bison libssl-dev libelf-dev \
+          sudo apt update
+          sudo apt install -y bc build-essential flex bison libssl-dev libelf-dev \
           crossbuild-essential-arm64 mkbootimg device-tree-compiler
 
       - name: Prepare Defconfig
@@ -31,36 +32,38 @@ jobs:
           mkdir -p .output
           make O=.output sdm660_defconfig
 
-      - name: Inject X00TD & Networking Drivers
+      - name: Networking Drivers
         run: |
-          # Fokus: Mengaktifkan seluruh jalur jaringan & fitur router
-          scripts/config --objtree .output --enable CONFIG_WCN3990
-          scripts/config --objtree .output --enable CONFIG_QCOM_IPA
-          scripts/config --objtree .output --enable CONFIG_QCOM_BAM_DMUX
-          scripts/config --objtree .output --enable CONFIG_BRIDGE
-          scripts/config --objtree .output --enable CONFIG_VLAN_8021Q
-          scripts/config --objtree .output --enable CONFIG_TUN
-          scripts/config --objtree .output --enable CONFIG_PPP
-          scripts/config --objtree .output --enable CONFIG_IP_NF_IPTABLES
-          scripts/config --objtree .output --enable CONFIG_IP_NF_NAT
-          scripts/config --objtree .output --enable CONFIG_NETFILTER_XT_MATCH_COMMENT
-          scripts/config --objtree .output --enable CONFIG_SQUASHFS
-          scripts/config --objtree .output --enable CONFIG_OVERLAY_FS
+          # Mengaktifkan seluruh jalur jaringan & fitur router (OpenWrt ready)
+          ./scripts/config --objtree .output --enable CONFIG_WCN3990
+          ./scripts/config --objtree .output --enable CONFIG_QCOM_IPA
+          ./scripts/config --objtree .output --enable CONFIG_QCOM_BAM_DMUX
+          ./scripts/config --objtree .output --enable CONFIG_BRIDGE
+          ./scripts/config --objtree .output --enable CONFIG_VLAN_8021Q
+          ./scripts/config --objtree .output --enable CONFIG_TUN
+          ./scripts/config --objtree .output --enable CONFIG_PPP
+          ./scripts/config --objtree .output --enable CONFIG_IP_NF_IPTABLES
+          ./scripts/config --objtree .output --enable CONFIG_IP_NF_NAT
+          ./scripts/config --objtree .output --enable CONFIG_NETFILTER_XT_MATCH_COMMENT
+          ./scripts/config --objtree .output --enable CONFIG_SQUASHFS
+          ./scripts/config --objtree .output --enable CONFIG_OVERLAY_FS
           
-          # Terapkan perubahan
-          cd .output && make olddefconfig
+          # Sinkronisasi konfigurasi
+          cd .output && make LOCALVERSION=$LOCALVERSION olddefconfig
 
-      - name: Compile Kernel & DTB
+      - name: Kernel & DTB
         run: |
+          # Build menggunakan cross-compiler
           make O=.output LOCALVERSION=$LOCALVERSION -j$(nproc) Image.gz dtbs modules
 
-      - name: Prepare Output Directory (pmOS Standard)
+      - name: Prepare Output Directory
         run: |
           mkdir -p deploy/dtb
           cp .output/arch/arm64/boot/Image.gz deploy/vmlinuz
-          cp .output/arch/arm64/boot/dts/qcom/sdm660-asus-x00td.dtb deploy/dtb/
+          # Pastikan path DTB benar sesuai struktur kernel mainline sdm660
+          cp .output/arch/arm64/boot/dts/qcom/sdm660-asus-x00td.dtb deploy/dtb/ || cp .output/arch/arm64/boot/dts/qcom/qcom-sdm660-asus-x00td.dtb deploy/dtb/
           
-          # Buat extlinux.conf standar
+          # Buat file extlinux.conf sesuai standar postmarketOS
           cat <<EOF > deploy/extlinux.conf
           label postmarketOS
             kernel /vmlinuz
@@ -75,8 +78,9 @@ jobs:
 
       - name: Create Android boot.img
         run: |
-          # Menggabungkan Kernel + DTB untuk bootloader Android
-          cat .output/arch/arm64/boot/Image.gz .output/arch/arm64/boot/dts/qcom/sdm660-asus-x00td.dtb > Image.gz-dtb
+          # Menggabungkan Kernel + DTB (Format untuk Fastboot Android)
+          DTB_FILE=$(find .output/arch/arm64/boot/dts/qcom/ -name "*x00td.dtb" | head -n 1)
+          cat .output/arch/arm64/boot/Image.gz $DTB_FILE > Image.gz-dtb
           
           mkbootimg \
             --kernel Image.gz-dtb \
@@ -94,7 +98,7 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: X00TD-Mainline-Standard
+          name: X00TD-Mainline
           path: |
             deploy/boot.img
             deploy/vmlinuz
