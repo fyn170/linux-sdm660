@@ -34,22 +34,22 @@ jobs:
 
       - name: Networking Drivers
         run: |
-          # Mengaktifkan seluruh jalur jaringan & fitur router (OpenWrt ready)
-          ./scripts/config --objtree .output --enable CONFIG_WCN3990
-          ./scripts/config --objtree .output --enable CONFIG_QCOM_IPA
-          ./scripts/config --objtree .output --enable CONFIG_QCOM_BAM_DMUX
-          ./scripts/config --objtree .output --enable CONFIG_BRIDGE
-          ./scripts/config --objtree .output --enable CONFIG_VLAN_8021Q
-          ./scripts/config --objtree .output --enable CONFIG_TUN
-          ./scripts/config --objtree .output --enable CONFIG_PPP
-          ./scripts/config --objtree .output --enable CONFIG_IP_NF_IPTABLES
-          ./scripts/config --objtree .output --enable CONFIG_IP_NF_NAT
-          ./scripts/config --objtree .output --enable CONFIG_NETFILTER_XT_MATCH_COMMENT
-          ./scripts/config --objtree .output --enable CONFIG_SQUASHFS
-          ./scripts/config --objtree .output --enable CONFIG_OVERLAY_FS
+          KCONFIG=.output/.config
+
+          ./scripts/config --file $KCONFIG --enable CONFIG_WCN3990
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_IPA
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_BAM_DMUX
+          ./scripts/config --file $KCONFIG --enable CONFIG_BRIDGE
+          ./scripts/config --file $KCONFIG --enable CONFIG_VLAN_8021Q
+          ./scripts/config --file $KCONFIG --enable CONFIG_TUN
+          ./scripts/config --file $KCONFIG --enable CONFIG_PPP
+          ./scripts/config --file $KCONFIG --enable CONFIG_IP_NF_IPTABLES
+          ./scripts/config --file $KCONFIG --enable CONFIG_IP_NF_NAT
+          ./scripts/config --file $KCONFIG --enable CONFIG_NETFILTER_XT_MATCH_COMMENT
+          ./scripts/config --file $KCONFIG --enable CONFIG_SQUASHFS
+          ./scripts/config --file $KCONFIG --enable CONFIG_OVERLAY_FS
           
-          # Sinkronisasi konfigurasi
-          cd .output && make LOCALVERSION=$LOCALVERSION olddefconfig
+          make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
 
       - name: Kernel & DTB
         run: |
