@@ -51,7 +51,7 @@ jobs:
           
           make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
 
-      - name: Kernel & DTB
+      - name: Compile Kernel & DTB
         run: |
           # Build menggunakan cross-compiler
           make O=.output LOCALVERSION=$LOCALVERSION -j$(nproc) Image.gz dtbs modules
@@ -60,14 +60,19 @@ jobs:
         run: |
           mkdir -p deploy/dtb
           cp .output/arch/arm64/boot/Image.gz deploy/vmlinuz
-          # Pastikan path DTB benar sesuai struktur kernel mainline sdm660
-          cp .output/arch/arm64/boot/dts/qcom/sdm660-asus-x00td.dtb deploy/dtb/ || cp .output/arch/arm64/boot/dts/qcom/qcom-sdm660-asus-x00td.dtb deploy/dtb/
           
-          # Buat file extlinux.conf sesuai standar postmarketOS
+          DTB_PATH=$(find .output/arch/arm64/boot/dts/qcom/ -name "*x00td*.dtb" | head -n 1)
+          cp $DTB_PATH deploy/dtb/sdm660-asus-x00td.dtb
+
           cat <<EOF > deploy/extlinux.conf
+          timeout 1
+          default postmarketOS
+          menu title boot X00TD mainline
+
           label postmarketOS
             kernel /vmlinuz
             fdt /dtb/sdm660-asus-x00td.dtb
+            initrd /ramdisk.img
             append console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk0p51 rw rootwait
           EOF
 
