@@ -25,14 +25,14 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y bc build-essential flex bison libssl-dev libelf-dev \
-          crossbuild-essential-arm64 device-tree-compiler python3
+          crossbuild-essential-arm64 device-tree-compiler
 
       - name: Prepare Defconfig
         run: |
           mkdir -p .output
           make O=.output sdm660_defconfig
 
-      - name: Networking Drivers
+      - name: Inject Networking Drivers (OpenWrt)
         run: |
           KCONFIG=.output/.config
           ./scripts/config --file $KCONFIG --enable CONFIG_WCN3990
@@ -44,7 +44,6 @@ jobs:
           ./scripts/config --file $KCONFIG --enable CONFIG_PPP
           ./scripts/config --file $KCONFIG --enable CONFIG_IP_NF_IPTABLES
           ./scripts/config --file $KCONFIG --enable CONFIG_IP_NF_NAT
-          ./scripts/config --file $KCONFIG --enable CONFIG_NETFILTER_XT_MATCH_COMMENT
           ./scripts/config --file $KCONFIG --enable CONFIG_SQUASHFS
           ./scripts/config --file $KCONFIG --enable CONFIG_OVERLAY_FS
           
@@ -81,20 +80,15 @@ jobs:
 
       - name: Create boot.img
         run: |
-          # Menggunakan mirror osm0sis yang lebih stabil
-          curl -Lo mkbootimg.py https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg.py
-          chmod +x mkbootimg.py
+          git clone https://github.com/draekko/AIK-Linux
           
-          # Verifikasi file (jika bukan python script, maka curl gagal)
-          if ! grep -q "import" mkbootimg.py; then
-            echo "Error: Gagal mengunduh mkbootimg.py yang valid (404 Not Found)"
-            exit 1
-          fi
-
+          AIK_MKBOOT="./AIK-Linux/bin/linux/x86_64/mkbootimg"
+          chmod +x $AIK_MKBOOT
+          
           DTB_FILE=$(find .output/arch/arm64/boot/dts/qcom/ -name "*x00td.dtb" | head -n 1)
           cat .output/arch/arm64/boot/Image.gz $DTB_FILE > Image.gz-dtb
           
-          python3 mkbootimg.py \
+          $AIK_MKBOOT \
             --kernel Image.gz-dtb \
             --ramdisk deploy/ramdisk.img \
             --base 0x80000000 \
@@ -107,14 +101,8 @@ jobs:
           make O=.output INSTALL_MOD_PATH=../deploy/modules modules_install
           cd deploy/modules && tar -czf ../modules.tar.gz .
 
-      - name: Upload Build Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: X00TD-Mainline
-          path: |
-            deploy/boot.img
-            deploy/vmlinuz
-            deploy/dtb/
-            deploy/extlinux.conf
-            deploy/ramdisk.img
-            deploy/modules.tar.gz
+          name: X00TD-Mainline-AIK
+          path: deploy/
