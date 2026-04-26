@@ -73,7 +73,7 @@ jobs:
             kernel /vmlinuz
             fdt /dtb/sdm660-asus-x00td.dtb
             initrd /ramdisk.img
-            append console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk0p51 rw rootwait
+            append console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk1p2 rw rootwait
           EOF
 
       - name: Generate ramdisk
@@ -81,18 +81,20 @@ jobs:
           echo "OpenWrt Placeholder" > ramdisk.txt
           gzip -c ramdisk.txt > deploy/ramdisk.img
 
-      - name: Create Android boot.img
+      - name: Create boot.img
         run: |
-          # Menggabungkan Kernel + DTB (Format untuk Fastboot Android)
+          curl -Lo mkbootimg.py https://raw.githubusercontent.com/aosp-mirror/platform_system_tools_mkbootimg/master/mkbootimg.py
+          chmod +x mkbootimg.py
+
           DTB_FILE=$(find .output/arch/arm64/boot/dts/qcom/ -name "*x00td.dtb" | head -n 1)
           cat .output/arch/arm64/boot/Image.gz $DTB_FILE > Image.gz-dtb
           
-          mkbootimg \
+          python3 mkbootimg.py \
             --kernel Image.gz-dtb \
             --ramdisk deploy/ramdisk.img \
             --base 0x80000000 \
             --pagesize 2048 \
-            --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk0p51 rw rootwait" \
+            --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk1p2 rw rootwait" \
             -o deploy/boot.img
 
       - name: Package Kernel Modules
