@@ -32,12 +32,32 @@ jobs:
           mkdir -p .output
           make O=.output sdm660_defconfig
 
-      - name: Inject Networking Drivers (OpenWrt)
+      - name: Inject Networking Drivers
         run: |
           KCONFIG=.output/.config
-          ./scripts/config --file $KCONFIG --enable CONFIG_WCN3990
+          
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_IPCC
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_QMP
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_AOSS_QMP
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_PIL_INFO
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_SYSMON
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_RPROC_COMMON
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_Q6V5_COMMON
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_Q6V5_WCSS
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_Q6V5_MSS
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_WCNSS_PIL
+          
+          ./scripts/config --file $KCONFIG --enable CONFIG_ATH10K
+          ./scripts/config --file $KCONFIG --enable CONFIG_ATH10K_SNOC
+          ./scripts/config --file $KCONFIG --enable CONFIG_WLAN_VENDOR_ATH
           ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_IPA
-          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_BAM_DMUX
+          ./scripts/config --file $KCONFIG --enable CONFIG_CRYPTO_ARC4
+          ./scripts/config --file $KCONFIG --enable CONFIG_RFKILL
+          
+          ./scripts/config --file $KCONFIG --enable CONFIG_INTERCONNECT
+          ./scripts/config --file $KCONFIG --enable CONFIG_INTERCONNECT_QCOM
+          ./scripts/config --file $KCONFIG --enable CONFIG_INTERCONNECT_QCOM_SDM660
+
           ./scripts/config --file $KCONFIG --enable CONFIG_BRIDGE
           ./scripts/config --file $KCONFIG --enable CONFIG_VLAN_8021Q
           ./scripts/config --file $KCONFIG --enable CONFIG_TUN
@@ -48,7 +68,7 @@ jobs:
           ./scripts/config --file $KCONFIG --enable CONFIG_OVERLAY_FS
           
           make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
-
+          
       - name: Compile Kernel & DTB
         run: |
           make O=.output LOCALVERSION=$LOCALVERSION -j$(nproc) Image.gz dtbs modules
