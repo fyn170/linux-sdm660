@@ -66,6 +66,13 @@ jobs:
           ./scripts/config --file $KCONFIG --enable CONFIG_IP_NF_NAT
           ./scripts/config --file $KCONFIG --enable CONFIG_SQUASHFS
           ./scripts/config --file $KCONFIG --enable CONFIG_OVERLAY_FS
+
+          ./scripts/config --file $KCONFIG --enable CONFIG_QRTR
+          ./scripts/config --file $KCONFIG --enable CONFIG_QRTR_SMD
+          ./scripts/config --file $KCONFIG --enable CONFIG_QRTR_TUN
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_QMI_HELPERS
+          ./scripts/config --file $KCONFIG --enable CONFIG_RPMSG_QCOM_SMD
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_SMD_RPM
           
           make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
           
