@@ -1,0 +1,121 @@
+name: Build X00TD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'qcom-sdm660-*'
+
+jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      DEVICE: asus-x00td
+      LOCALVERSION: "-x00td-mainline"
+    
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          repository: sdm660-mainline/linux
+          ref: atr/asus-x00td-fixes
+          clean: false
+
+      - name: Install Build Tools
+        run: |
+          sudo apt update
+          sudo apt install -y bc build-essential flex bison libssl-dev libelf-dev \
+          crossbuild-essential-arm64 device-tree-compiler liblzma-dev cpio
+
+      - name: Prepare Defconfig
+        run: |
+          mkdir -p .output
+          make O=.output sdm660_defconfig
+
+      - name: Inject Networking Drivers
+        run: |
+          KCONFIG=.output/.config
+          ./scripts/config --file $KCONFIG --builtin CONFIG_QRTR
+          ./scripts/config --file $KCONFIG --builtin CONFIG_QRTR_SMD
+          ./scripts/config --file $KCONFIG --builtin CONFIG_QRTR_TUN
+          ./scripts/config --file $KCONFIG --builtin CONFIG_QCOM_Q6V5_MSS
+          ./scripts/config --file $KCONFIG --builtin CONFIG_QCOM_SYSMON
+          ./scripts/config --file $KCONFIG --builtin CONFIG_QCOM_IPA
+          ./scripts/config --file $KCONFIG --builtin CONFIG_ATH10K
+          ./scripts/config --file $KCONFIG --builtin CONFIG_ATH10K_SNOC
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_IPCC
+          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_QMP
+          ./scripts/config --file $KCONFIG --enable CONFIG_RPMSG_QCOM_SMD
+          ./scripts/config --file $KCONFIG --enable CONFIG_BRIDGE
+          ./scripts/config --file $KCONFIG --enable CONFIG_VLAN_8021Q
+          make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
+          
+      - name: Compile Kernel & DTB
+        run: |
+          make O=.output LOCALVERSION=$LOCALVERSION -j$(nproc) Image.gz dtbs modules
+
+      - name: Build Userspace Tools
+        run: |
+          mkdir -p tools_build
+          git clone --depth 1 https://github.com/andersson/qrtr.git tools_build/qrtr
+          git clone --depth 1 https://github.com/andersson/pd-mapper.git tools_build/pd-mapper
+          
+          CC=aarch64-linux-gnu-gcc
+          $CC -O2 -c tools_build/qrtr/lib/qrtr.c -o tools_build/qrtr.o -Itools_build/qrtr/lib
+          $CC -static -O2 tools_build/pd-mapper/*.c tools_build/qrtr.o -Itools_build/pd-mapper -Itools_build/qrtr/lib -o tools_build/pd-mapper -llzma
+          $CC -static -O2 tools_build/qrtr/src/lookup.c tools_build/qrtr.o -Itools_build/qrtr/lib -o tools_build/qrtr-lookup
+
+      - name: Prepare Output Directory
+        run: |
+          mkdir -p deploy/dtb
+          cp .output/arch/arm64/boot/Image.gz deploy/vmlinuz
+          DTB_PATH=$(find .output/arch/arm64/boot/dts/qcom/ -name "*x00td*.dtb" | head -n 1)
+          cp $DTB_PATH deploy/dtb/sdm660-asus-x00td.dtb
+
+      - name: Generate ramdisk
+        run: |
+          mkdir -p ramdisk_root/usr/bin
+          mkdir -p ramdisk_root/etc/init.d
+          cp tools_build/pd-mapper ramdisk_root/usr/bin/
+          cp tools_build/qrtr-lookup ramdisk_root/usr/bin/
+          chmod +x ramdisk_root/usr/bin/*
+          
+          cat <<EOF > ramdisk_root/init
+          #!/bin/sh
+          mount -t proc proc /proc
+          mount -t sysfs sysfs /sys
+          /usr/bin/pd-mapper &
+          exec /sbin/init
+          EOF
+          chmod +x ramdisk_root/init
+          
+          cd ramdisk_root
+          find . | cpio -H newc -o | gzip > ../deploy/ramdisk.img
+
+      - name: Create boot.img
+        run: |
+          git clone https://github.com/draekko/AIK-Linux
+          AIK_MKBOOT="./AIK-Linux/bin/linux/x86_64/mkbootimg"
+          chmod +x $AIK_MKBOOT
+          DTB_FILE=$(find .output/arch/arm64/boot/dts/qcom/ -name "*x00td.dtb" | head -n 1)
+          cat .output/arch/arm64/boot/Image.gz $DTB_FILE > Image.gz-dtb
+          $AIK_MKBOOT \
+            --kernel Image.gz-dtb \
+            --ramdisk deploy/ramdisk.img \
+            --base 0x80000000 \
+            --pagesize 2048 \
+            --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x00a84000 root=/dev/mmcblk1p2 rw rootwait" \
+            -o deploy/boot.img
+
+      - name: Package Kernel Modules
+        run: |
+          make O=.output INSTALL_MOD_PATH=../deploy/modules modules_install
+          cd deploy/modules && tar -czf ../modules.tar.gz .
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: X00TD-Mainline-Final
+          path: deploy/
