@@ -66,11 +66,19 @@ jobs:
           git clone --depth 1 https://github.com/andersson/qrtr.git tools_build/qrtr
           git clone --depth 1 https://github.com/andersson/pd-mapper.git tools_build/pd-mapper
           
+          cp tools_build/qrtr/lib/qrtr.h tools_build/qrtr/lib/libqrtr.h
+          
           CC=aarch64-linux-gnu-gcc
-          $CC -O2 -c tools_build/qrtr/lib/qrtr.c -o tools_build/qrtr.o -Itools_build/qrtr/lib
-          $CC -static -O2 tools_build/pd-mapper/*.c tools_build/qrtr.o -Itools_build/pd-mapper -Itools_build/qrtr/lib -o tools_build/pd-mapper -llzma
-          $CC -static -O2 tools_build/qrtr/src/lookup.c tools_build/qrtr.o -Itools_build/qrtr/lib -o tools_build/qrtr-lookup
 
+          $CC -O2 -c tools_build/qrtr/lib/qrtr.c -o tools_build/qrtr.o -Itools_build/qrtr/lib
+
+          $CC -static -O2 tools_build/pd-mapper/*.c tools_build/qrtr.o \
+            -Itools_build/pd-mapper -Itools_build/qrtr/lib \
+            -o tools_build/pd-mapper -llzma
+            
+          $CC -static -O2 tools_build/qrtr/src/lookup.c tools_build/qrtr.o \
+            -Itools_build/qrtr/lib -o tools_build/qrtr-lookup
+            
       - name: Prepare Output Directory
         run: |
           mkdir -p deploy/dtb
