@@ -37,19 +37,23 @@ jobs:
       - name: Inject Networking Drivers
         run: |
           KCONFIG=.output/.config
-          ./scripts/config --file $KCONFIG --builtin CONFIG_QRTR
-          ./scripts/config --file $KCONFIG --builtin CONFIG_QRTR_SMD
-          ./scripts/config --file $KCONFIG --builtin CONFIG_QRTR_TUN
-          ./scripts/config --file $KCONFIG --builtin CONFIG_QCOM_Q6V5_MSS
-          ./scripts/config --file $KCONFIG --builtin CONFIG_QCOM_SYSMON
-          ./scripts/config --file $KCONFIG --builtin CONFIG_QCOM_IPA
-          ./scripts/config --file $KCONFIG --builtin CONFIG_ATH10K
-          ./scripts/config --file $KCONFIG --builtin CONFIG_ATH10K_SNOC
-          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_IPCC
-          ./scripts/config --file $KCONFIG --enable CONFIG_QCOM_QMP
-          ./scripts/config --file $KCONFIG --enable CONFIG_RPMSG_QCOM_SMD
-          ./scripts/config --file $KCONFIG --enable CONFIG_BRIDGE
-          ./scripts/config --file $KCONFIG --enable CONFIG_VLAN_8021Q
+
+          # Gunakan -e atau --enable untuk menjadikan driver Built-in (=y)
+          ./scripts/config --file $KCONFIG \
+            -e CONFIG_QRTR \
+            -e CONFIG_QRTR_SMD \
+            -e CONFIG_QRTR_TUN \
+            -e CONFIG_QCOM_Q6V5_MSS \
+            -e CONFIG_QCOM_SYSMON \
+            -e CONFIG_QCOM_IPA \
+            -e CONFIG_ATH10K \
+            -e CONFIG_ATH10K_SNOC \
+            -e CONFIG_QCOM_IPCC \
+            -e CONFIG_QCOM_QMP \
+            -e CONFIG_RPMSG_QCOM_SMD \
+            -e CONFIG_BRIDGE \
+            -e CONFIG_VLAN_8021Q
+          
           make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
           
       - name: Compile Kernel & DTB
