@@ -1,4 +1,4 @@
-name: Build X00TD
+name: Build X00TD Mainline
 
 on:
   workflow_dispatch:
@@ -25,9 +25,10 @@ jobs:
 
       - name: Install Build Tools
         run: |
+          sudo dpkg --add-architecture arm64
           sudo apt update
           sudo apt install -y bc build-essential flex bison libssl-dev libelf-dev \
-          crossbuild-essential-arm64 device-tree-compiler liblzma-dev cpio
+          crossbuild-essential-arm64 device-tree-compiler liblzma-dev:arm64 cpio
 
       - name: Prepare Defconfig
         run: |
@@ -37,23 +38,19 @@ jobs:
       - name: Inject Networking Drivers
         run: |
           KCONFIG=.output/.config
-
-          # Gunakan -e atau --enable untuk menjadikan driver Built-in (=y)
-          ./scripts/config --file $KCONFIG \
-            -e CONFIG_QRTR \
-            -e CONFIG_QRTR_SMD \
-            -e CONFIG_QRTR_TUN \
-            -e CONFIG_QCOM_Q6V5_MSS \
-            -e CONFIG_QCOM_SYSMON \
-            -e CONFIG_QCOM_IPA \
-            -e CONFIG_ATH10K \
-            -e CONFIG_ATH10K_SNOC \
-            -e CONFIG_QCOM_IPCC \
-            -e CONFIG_QCOM_QMP \
-            -e CONFIG_RPMSG_QCOM_SMD \
-            -e CONFIG_BRIDGE \
-            -e CONFIG_VLAN_8021Q
-          
+          ./scripts/config --file $KCONFIG -e CONFIG_QRTR
+          ./scripts/config --file $KCONFIG -e CONFIG_QRTR_SMD
+          ./scripts/config --file $KCONFIG -e CONFIG_QRTR_TUN
+          ./scripts/config --file $KCONFIG -e CONFIG_QCOM_Q6V5_MSS
+          ./scripts/config --file $KCONFIG -e CONFIG_QCOM_SYSMON
+          ./scripts/config --file $KCONFIG -e CONFIG_QCOM_IPA
+          ./scripts/config --file $KCONFIG -e CONFIG_ATH10K
+          ./scripts/config --file $KCONFIG -e CONFIG_ATH10K_SNOC
+          ./scripts/config --file $KCONFIG -e CONFIG_QCOM_IPCC
+          ./scripts/config --file $KCONFIG -e CONFIG_QCOM_QMP
+          ./scripts/config --file $KCONFIG -e CONFIG_RPMSG_QCOM_SMD
+          ./scripts/config --file $KCONFIG -e CONFIG_BRIDGE
+          ./scripts/config --file $KCONFIG -e CONFIG_VLAN_8021Q
           make O=.output LOCALVERSION=$LOCALVERSION olddefconfig
           
       - name: Compile Kernel & DTB
@@ -66,19 +63,18 @@ jobs:
           git clone --depth 1 https://github.com/andersson/qrtr.git tools_build/qrtr
           git clone --depth 1 https://github.com/andersson/pd-mapper.git tools_build/pd-mapper
           
-          cp tools_build/qrtr/lib/qrtr.h tools_build/qrtr/lib/libqrtr.h
+          QRTR_H=$(find tools_build/qrtr -name "qrtr.h" | head -n 1)
+          QRTR_C=$(find tools_build/qrtr -name "qrtr.c" | head -n 1)
+          QRTR_DIR=$(dirname $QRTR_H)
+          cp $QRTR_H $QRTR_DIR/libqrtr.h
           
           CC=aarch64-linux-gnu-gcc
+          $CC -O2 -c $QRTR_C -o tools_build/qrtr.o -I$QRTR_DIR
+          $CC -static -O2 tools_build/pd-mapper/*.c tools_build/qrtr.o -Itools_build/pd-mapper -I$QRTR_DIR -o tools_build/pd-mapper -llzma
+          
+          LOOKUP_C=$(find tools_build/qrtr -name "lookup.c" | head -n 1)
+          $CC -static -O2 $LOOKUP_C tools_build/qrtr.o -I$QRTR_DIR -o tools_build/qrtr-lookup
 
-          $CC -O2 -c tools_build/qrtr/lib/qrtr.c -o tools_build/qrtr.o -Itools_build/qrtr/lib
-
-          $CC -static -O2 tools_build/pd-mapper/*.c tools_build/qrtr.o \
-            -Itools_build/pd-mapper -Itools_build/qrtr/lib \
-            -o tools_build/pd-mapper -llzma
-            
-          $CC -static -O2 tools_build/qrtr/src/lookup.c tools_build/qrtr.o \
-            -Itools_build/qrtr/lib -o tools_build/qrtr-lookup
-            
       - name: Prepare Output Directory
         run: |
           mkdir -p deploy/dtb
@@ -89,7 +85,6 @@ jobs:
       - name: Generate ramdisk
         run: |
           mkdir -p ramdisk_root/usr/bin
-          mkdir -p ramdisk_root/etc/init.d
           cp tools_build/pd-mapper ramdisk_root/usr/bin/
           cp tools_build/qrtr-lookup ramdisk_root/usr/bin/
           chmod +x ramdisk_root/usr/bin/*
@@ -129,5 +124,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: X00TD-Mainline-Final
+          name: X00TD-Mainline-Final-Build
           path: deploy/
