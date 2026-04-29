@@ -58,30 +58,25 @@ jobs:
 
       - name: Build Userspace Tools
         run: |
-          # Pastikan folder tujuan ada
           mkdir -p deploy tools_build
-          
-          # Clone source code
           git clone --depth 1 https://github.com/andersson/qrtr.git tools_build/qrtr
           git clone --depth 1 https://github.com/andersson/pd-mapper.git tools_build/pd-mapper
           
-          # Andersson structure: file ada di folder lib/
-          # Kita copy qrtr.h menjadi libqrtr.h agar sesuai dengan #include di source code
-          cp tools_build/qrtr/lib/qrtr.h tools_build/qrtr/lib/libqrtr.h
-          
+          QRTR_DIR=$GITHUB_WORKSPACE/tools_build/qrtr
+          PD_DIR=$GITHUB_WORKSPACE/tools_build/pd-mapper
           CC=aarch64-linux-gnu-gcc
-          
-          # 1. Compile Library QRTR
-          $CC -O2 -c tools_build/qrtr/lib/qrtr.c -o tools_build/qrtr.o -Itools_build/qrtr/lib
-          
-          # 2. Compile PD-MAPPER secara STATIC
-          $CC -static -O2 tools_build/pd-mapper/*.c tools_build/qrtr.o \
-            -Itools_build/pd-mapper -Itools_build/qrtr/lib \
+
+          $CC -O2 -c $QRTR_DIR/lib/qrtr.c -o qrtr.o -I$QRTR_DIR/include
+          $CC -O2 -c $QRTR_DIR/lib/qmi.c -o qmi.o -I$QRTR_DIR/include
+          $CC -O2 -c $QRTR_DIR/lib/logging.c -o logging.o -I$QRTR_DIR/include
+
+          $CC -static -O2 $PD_DIR/*.c qrtr.o qmi.o logging.o \
+            -I$QRTR_DIR/include -I$PD_DIR \
             -o deploy/pd-mapper
-            
-          # 3. Compile QRTR-LOOKUP (Opsional tapi berguna buat debug modem)
-          $CC -static -O2 tools_build/qrtr/src/lookup.c tools_build/qrtr.o \
-            -Itools_build/qrtr/lib -o deploy/qrtr-lookup
+
+          $CC -static -O2 $QRTR_DIR/src/lookup.c qrtr.o logging.o \
+            -I$QRTR_DIR/include \
+            -o deploy/qrtr-lookup
 
       - name: Prepare Output Directory
         run: |
