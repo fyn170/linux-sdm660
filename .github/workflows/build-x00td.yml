@@ -66,17 +66,22 @@ jobs:
           PD_DIR=$GITHUB_WORKSPACE/tools_build/pd-mapper
           CC=aarch64-linux-gnu-gcc
 
-          $CC -O2 -c $QRTR_DIR/lib/qrtr.c -o qrtr.o -I$QRTR_DIR/include
-          $CC -O2 -c $QRTR_DIR/lib/qmi.c -o qmi.o -I$QRTR_DIR/include
-          $CC -O2 -c $QRTR_DIR/lib/logging.c -o logging.o -I$QRTR_DIR/include
+          sed -i 's/#include <lzma.h>/\/\/#include <lzma.h>/g' $PD_DIR/json.c
+          sed -i 's/#include <lzma.h>/\/\/#include <lzma.h>/g' $PD_DIR/lzma_decomp.c
+          echo "int lzma_decomp(const char *a, size_t b, void **c, size_t *d) { return -1; }" > $PD_DIR/lzma_decomp.c
 
-          $CC -static -O2 $PD_DIR/*.c qrtr.o qmi.o logging.o \
-            -I$QRTR_DIR/include -I$PD_DIR \
-            -o deploy/pd-mapper
+          cp $QRTR_DIR/include/*.h $PD_DIR/
+          cp $QRTR_DIR/lib/*.h $PD_DIR/ 2>/dev/null || true
 
-          $CC -static -O2 $QRTR_DIR/src/lookup.c qrtr.o logging.o \
-            -I$QRTR_DIR/include \
-            -o deploy/qrtr-lookup
+          $CC -O2 -c $QRTR_DIR/lib/qrtr.c -o qrtr.o -I$PD_DIR
+          $CC -O2 -c $QRTR_DIR/lib/qmi.c -o qmi.o -I$PD_DIR
+          $CC -O2 -c $QRTR_DIR/lib/logging.c -o logging.o -I$PD_DIR
+
+          $CC -static -O2 $PD_DIR/assoc.c $PD_DIR/json.c $PD_DIR/pd-mapper.c \
+            $PD_DIR/servreg_loc.c $PD_DIR/lzma_decomp.c qrtr.o qmi.o logging.o \
+            -I$PD_DIR -o deploy/pd-mapper
+
+          $CC -static -O2 $QRTR_DIR/src/lookup.c qrtr.o logging.o -I$PD_DIR -o deploy/qrtr-lookup
 
       - name: Prepare Output Directory
         run: |
